@@ -15,6 +15,8 @@ fn main() {
              Ok(mut stream) => {
 
                 loop {
+                    let mut buf = [0;512];
+                    stream.read(&mut buf);
                     stream.write_all(b"+PONG\r\n").unwrap()
                 }
 
