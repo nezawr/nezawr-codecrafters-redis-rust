@@ -28,12 +28,12 @@ impl FromStr for RedisCommand {
                 Ok(RedisCommand::Echo(message.to_string()))
             }
 
-            ["*3", "*3", "SET", key_len,  key, value_len, value]
+            ["*3", "$3", "SET", key_len,  key, value_len, value]
                 if key_len.starts_with("$") && value_len.starts_with("$") => {
                     Ok(RedisCommand::Set(key.to_string(), value.to_string()))
             }
 
-            ["*2", "*3", "GET", key_len, key] if key_len.starts_with("$") => {
+            ["*2", "$3", "GET", key_len, key] if key_len.starts_with("$") => {
                 Ok(RedisCommand::Get(key.to_string()))
             }
 
@@ -102,7 +102,7 @@ fn handle_command(input: &[u8], store: &Arc<Mutex<HashMap<String, String>>>) -> 
             if let Some(value) = store.get(&key) {
                 Some(format!("${}\r\n{}\r\n", value.len(), value))
             } else {
-                Some("-1\r\n".to_string())
+                Some("$-1\r\n".to_string())
             }
 
         }
