@@ -21,50 +21,36 @@ impl FromStr for RedisCommand {
         let parts: Vec<&str> = command.lines().collect();
 
         match parts.as_slice() {
-            // Matches a PING command: *1\r\n$4\r\nPING\r\n
             ["*1", "$4", "PING"] => Ok(RedisCommand::Ping),
-
-            // Matches an ECHO command: *2\r\n$4\r\nECHO\r\n$<len>\r\n<message>\r\n
-            ["*2", "$4", "ECHO", len, message] if len.starts_with('$') => {
-                Ok(RedisCommand::Echo(message.to_string()))
+            ["*2", "$4", "ECHO", len, message]
+                if len.starts_with('$') => {
+                    Ok(RedisCommand::Echo(message.to_string()))
             }
-
-            // Handle SET with PX (case-insensitive)
-            ["*5", "$3", "SET", key_len, key, value_len, value, px, expiry_len, expiry]
-                if key_len.starts_with('$')
-                    && value_len.starts_with('$')
-                    && expiry_len.starts_with('$')
-                    && px.to_lowercase() == "px" =>
+            ["*5", "$3", "SET", key_len, key, value_len, value, px,
+                expiry_len, expiry] if key_len.starts_with('$')
+                && value_len.starts_with('$')
+                && expiry_len.starts_with('$')
+                && px.to_lowercase() == "px" =>
             {
                 let expiry_ms = expiry.parse::<u64>().ok();
                 let expiry = expiry_ms.map(Duration::from_millis);
-                Ok(RedisCommand::Set {
-                    key: key.to_string(),
-                    value: value.to_string(),
-                    expiry,
-                })
+                Ok(RedisCommand::Set { key: key.to_string(),
+                    value: value.to_string(), expiry })
             }
-
-            // Handle SET without PX
             ["*3", "$3", "SET", key_len, key, value_len, value]
                 if key_len.starts_with('$') && value_len.starts_with('$') =>
             {
-                Ok(RedisCommand::Set {
-                    key: key.to_string(),
-                    value: value.to_string(),
-                    expiry: None,
-                })
+                Ok(RedisCommand::Set { key: key.to_string(),
+                    value: value.to_string(), expiry: None })
             }
-
-            // Matches a GET command
-            ["*2", "$3", "GET", key_len, key] if key_len.starts_with('$') => {
-                Ok(RedisCommand::Get(key.to_string()))
+            ["*2", "$3", "GET", key_len, key]
+                if key_len.starts_with('$') => {
+                    Ok(RedisCommand::Get(key.to_string()))
             }
-
-            // If the command doesn't match known patterns
             _ => Ok(RedisCommand::Unknown),
         }
     }
+}
 
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
