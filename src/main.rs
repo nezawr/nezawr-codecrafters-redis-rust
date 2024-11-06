@@ -28,11 +28,13 @@ impl FromStr for RedisCommand {
                 if len.starts_with('$') => {
                     Ok(RedisCommand::Echo(message.to_string()))
             }
-            ["*5", "$3", "SET", key_len, key, value_len, value, px,
-                expiry_len, expiry] if key_len.starts_with('$')
-                && value_len.starts_with('$')
-                && expiry_len.starts_with('$')
-                && px.to_lowercase() == "px" =>
+            // Updated SET with PX pattern
+            ["*5", "$3", "SET", key_len, key, value_len, value, px_len, px, expiry_len, expiry]
+                if key_len.starts_with('$')
+                    && value_len.starts_with('$')
+                    && px_len.starts_with('$')
+                    && expiry_len.starts_with('$')
+                    && px.to_lowercase() == "px" =>
             {
                 let expiry_ms = expiry.parse::<u64>().ok();
                 let expiry = expiry_ms.map(Duration::from_millis);
@@ -111,49 +113,32 @@ fn handle_command(
     store: &Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>>
 ) -> Option<String> {
     let input_str = String::from_utf8_lossy(input);
-    println!("Received command in handle_command: {}", input_str); // Debug output
-
     match input_str.parse::<RedisCommand>() {
-        Ok(RedisCommand::Ping) => {
-            println!("Handling PING command"); // Debug output
-            Some("+PONG\r\n".to_string())
-        }
-        Ok(RedisCommand::Echo(message)) => {
-            println!("Handling ECHO command with message: {}", message); // Debug output
-            Some(format!("${}\r\n{}\r\n", message.len(), message))
-        }
+        Ok(RedisCommand::Ping) => Some("+PONG\r\n".to_string()),
+        Ok(RedisCommand::Echo(message)) => Some(format!("${}\r\n{}\r\n",
+            message.len(), message)),
         Ok(RedisCommand::Set { key, value, expiry }) => {
-            println!("Handling SET command with key: {}, value: {}, expiry: {:?}", key, value, expiry); // Debug output
             let mut store = store.lock().unwrap();
             let expiry_time = expiry.map(|dur| SystemTime::now() + dur);
             store.insert(key, (value, expiry_time));
             Some("+OK\r\n".to_string())
         }
         Ok(RedisCommand::Get(key)) => {
-            println!("Handling GET command for key: {}", key); // Debug output
             let mut store = store.lock().unwrap();
             if let Some((value, expiry)) = store.get(&key) {
                 if let Some(expiry_time) = expiry {
                     if SystemTime::now() > *expiry_time {
-                        println!("Key {} has expired", key); // Debug output
                         store.remove(&key);
                         return Some("$-1\r\n".to_string());
                     }
                 }
                 Some(format!("${}\r\n{}\r\n", value.len(), value))
             } else {
-                println!("Key {} does not exist", key); // Debug output
                 Some("$-1\r\n".to_string())
             }
         }
-        Ok(RedisCommand::Unknown) => {
-            println!("Received unknown command"); // Debug output
-            Some("-ERR unknown command\r\n".to_string())
-        }
-        Err(_) => {
-            println!("Failed to parse command"); // Debug output
-            None
-        }
+        Ok(RedisCommand::Unknown) =>
+            Some("-ERR unknown command\r\n".to_string()),
+        Err(_) => None,
     }
 }
-
