@@ -8,8 +8,8 @@ use std::env;
 
 #[derive(Debug)]
 struct ServerConfig {
-    dir: String,
-    dbfilename: String,
+    dir: Option<String>,
+    dbfilename: Option<String>,
 }
 
 #[derive(Debug)]
@@ -76,15 +76,16 @@ async fn main() -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let dir = args.iter().position(|x| x == "--dir")
         .and_then(|pos| args.get(pos + 1))
-        .expect("Missing --dir argument")
-        .to_string();
+        .map(|s| s.to_string());
 
     let dbfilename = args.iter().position(|x| x == "--dbfilename")
         .and_then(|pos| args.get(pos + 1))
-        .expect("Missing --dbfilename argument")
-        .to_string();
+        .map(|s| s.to_string());
 
-    let config: Arc<Mutex<ServerConfig>> = Arc::new(Mutex::new(ServerConfig { dir, dbfilename }));
+    let config: Arc<Mutex<ServerConfig>> = Arc::new(Mutex::new(ServerConfig {
+        dir: dir,
+        dbfilename: dbfilename
+         }));
     let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
@@ -165,9 +166,16 @@ fn handle_command(
         Ok(RedisCommand::ConfigGet(param)) => {
             let config = config.lock().unwrap();
             match param.as_str() {
-                "dir" => Some(format!("*2\r\n$3\r\ndir\r\n${}\r\n{}\r\n", config.dir.len(), config.dir)),
-                "dbfilename" => Some(format!("*2\r\n$10\r\ndbfilename\r\n${}\r\n{}\r\n", config.dbfilename.len(), config.dbfilename)),
+                "dir" => match &config.dir {
+                    Some(dir) => Some(format!("*2\r\n$3\r\ndir\r\n${}\r\n{}\r\n", dir.len(), dir)),
+                    None => Some("ERR dir not configured\r\n".to_string()),
+                }
+                "dbfilename" => match &config.dbfilename {
+                    Some(dbfilename) => Some(format!("*2\r\n$10\r\ndbfilename\r\n${}\r\n{}\r\n", dbfilename.len(), dbfilename)),
+                    None => Some("-ERR dbfilename not configured\r\n".to_string()),
+                },
                 _ => Some("-ERR unknown parameter\r\n".to_string()),
+
             }
         }
         Ok(RedisCommand::Unknown) =>
