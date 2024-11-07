@@ -4,6 +4,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::str::FromStr;
 use std::time::{SystemTime, Duration};
+use std::env;
+
+#[derive(Debug)]
+struct ServerConfig {
+    dir: String,
+    dbfilename: String,
+}
 
 #[derive(Debug)]
 enum RedisCommand {
@@ -11,6 +18,7 @@ enum RedisCommand {
     Echo(String),
     Set { key: String, value: String, expiry: Option<Duration> },
     Get(String),
+    ConfigGet(String),
     Unknown,
 }
 
@@ -38,14 +46,12 @@ impl FromStr for RedisCommand {
             {
                 let expiry_ms = expiry.parse::<u64>().ok();
                 let expiry = expiry_ms.map(Duration::from_millis);
-                println!("Parsed SET with PX: key={}, value={}, expiry={:?}", key, value, expiry); // Debugging output
                 Ok(RedisCommand::Set { key: key.to_string(),
                     value: value.to_string(), expiry })
             }
             ["*3", "$3", "SET", key_len, key, value_len, value]
                 if key_len.starts_with('$') && value_len.starts_with('$') =>
             {
-                println!("Parsed SET without PX: key={}, value={}", key, value); // Debugging output
                 Ok(RedisCommand::Set { key: key.to_string(),
                     value: value.to_string(), expiry: None })
             }
@@ -53,8 +59,11 @@ impl FromStr for RedisCommand {
                 if key_len.starts_with('$') => {
                     Ok(RedisCommand::Get(key.to_string()))
             }
+            ["*4", "$6", "CONFIG", "$3", "GET", param_len, param]
+                if param_len.starts_with('$') => {
+                Ok(RedisCommand::ConfigGet(param.to_string()))
+            }
             _ => {
-                println!("Unknown command structure: {:?}", parts); // Debugging output
                 Ok(RedisCommand::Unknown)
             }
         }
@@ -64,11 +73,24 @@ impl FromStr for RedisCommand {
 
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    let dir = args.iter().position(|x| x == "dir")
+        .and_then(|pos| args.get(pos + 1))
+        .expect("Missing --dir argument")
+        .to_string();
+
+    let dbfilename = args.iter().position(|x| x == "--dbfilename")
+        .and_then(|pos| args.get(pos + 1))
+        .expect("Missing --dbfilename argument")
+        .to_string();
+
+    let config: Arc<Mutex<ServerConfig>> = Arc::new(Mutex::new(ServerConfig { dir, dbfilename }));
+    let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
     println!("Server listening on port 6379");
 
-    let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
-        Arc::new(Mutex::new(HashMap::new()));
 
     loop {
         let (mut stream, _) = match listener.accept().await {
@@ -79,6 +101,7 @@ async fn main() -> tokio::io::Result<()> {
             }
         };
 
+        let config = Arc::clone(&config);
         let store = Arc::clone(&store);
 
         tokio::spawn(async move {
@@ -88,7 +111,7 @@ async fn main() -> tokio::io::Result<()> {
                     Ok(0) => break, // Client closed connection
                     Ok(n) => {
                         if let Some(response) =
-                            handle_command(&buf[..n], &store)
+                            handle_command(&buf[..n], &store, &config)
                         {
                             if stream.write_all(response.as_bytes())
                                 .await.is_err()
@@ -110,7 +133,8 @@ async fn main() -> tokio::io::Result<()> {
 
 fn handle_command(
     input: &[u8],
-    store: &Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>>
+    store: &Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>>,
+    config: &Arc<Mutex<ServerConfig>>,
 ) -> Option<String> {
     let input_str = String::from_utf8_lossy(input);
     match input_str.parse::<RedisCommand>() {
@@ -135,6 +159,15 @@ fn handle_command(
                 Some(format!("${}\r\n{}\r\n", value.len(), value))
             } else {
                 Some("$-1\r\n".to_string())
+            }
+        }
+
+        Ok(RedisCommand::ConfigGet(param)) => {
+            let config = config.lock().unwrap();
+            match param.as_str() {
+                "dir" => Some(format!("*2\r\n$3\r\ndir\r\n${}\r\n{}\r\n", config.dir.len(), config.dir)),
+                "dbfilename" => Some(format!("*2\r\n$10\r\ndbfilename\r\n${}\r\n{}\r\n", config.dbfilename.len(), config.dbfilename)),
+                _ => Some("-ERR unknown parameter\r\n".to_string()),
             }
         }
         Ok(RedisCommand::Unknown) =>
