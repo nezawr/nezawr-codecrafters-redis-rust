@@ -59,7 +59,7 @@ impl FromStr for RedisCommand {
                 if key_len.starts_with('$') => {
                     Ok(RedisCommand::Get(key.to_string()))
             }
-            ["*4", "$6", "CONFIG", "$3", "GET", param_len, param]
+            ["*3", "$6", "CONFIG", "$3", "GET", param_len, param]
                 if param_len.starts_with('$') => {
                 Ok(RedisCommand::ConfigGet(param.to_string()))
             }
