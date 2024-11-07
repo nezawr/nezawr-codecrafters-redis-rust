@@ -1,91 +1,18 @@
+mod config;
+mod command;
+mod handler;
+
 use tokio::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::str::FromStr;
-use std::time::{SystemTime, Duration};
-use std::env;
-
-#[derive(Debug)]
-struct ServerConfig {
-    dir: Option<String>,
-    dbfilename: Option<String>,
-}
-
-#[derive(Debug)]
-enum RedisCommand {
-    Ping,
-    Echo(String),
-    Set { key: String, value: String, expiry: Option<Duration> },
-    Get(String),
-    ConfigGet(String),
-    Unknown,
-}
-
-impl FromStr for RedisCommand {
-    type Err = ();
-
-    fn from_str(command: &str) -> Result<Self, Self::Err> {
-        println!("Received command: {:?}", command); // Debugging output
-        let parts: Vec<&str> = command.lines().collect();
-        println!("Command parts: {:?}", parts); // Debugging output
-
-        match parts.as_slice() {
-            ["*1", "$4", "PING"] => Ok(RedisCommand::Ping),
-            ["*2", "$4", "ECHO", len, message]
-                if len.starts_with('$') => {
-                    Ok(RedisCommand::Echo(message.to_string()))
-            }
-            // Updated SET with PX pattern
-            ["*5", "$3", "SET", key_len, key, value_len, value, px_len, px, expiry_len, expiry]
-                if key_len.starts_with('$')
-                    && value_len.starts_with('$')
-                    && px_len.starts_with('$')
-                    && expiry_len.starts_with('$')
-                    && px.to_lowercase() == "px" =>
-            {
-                let expiry_ms = expiry.parse::<u64>().ok();
-                let expiry = expiry_ms.map(Duration::from_millis);
-                Ok(RedisCommand::Set { key: key.to_string(),
-                    value: value.to_string(), expiry })
-            }
-            ["*3", "$3", "SET", key_len, key, value_len, value]
-                if key_len.starts_with('$') && value_len.starts_with('$') =>
-            {
-                Ok(RedisCommand::Set { key: key.to_string(),
-                    value: value.to_string(), expiry: None })
-            }
-            ["*2", "$3", "GET", key_len, key]
-                if key_len.starts_with('$') => {
-                    Ok(RedisCommand::Get(key.to_string()))
-            }
-            ["*3", "$6", "CONFIG", "$3", "GET", param_len, param]
-                if param_len.starts_with('$') => {
-                Ok(RedisCommand::ConfigGet(param.to_string()))
-            }
-            _ => {
-                Ok(RedisCommand::Unknown)
-            }
-        }
-    }
-}
-
+use std::time::SystemTime;
+use crate::config::ServerConfig;
+use crate::handler::handle_command;
 
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    let dir = args.iter().position(|x| x == "--dir")
-        .and_then(|pos| args.get(pos + 1))
-        .map(|s| s.to_string());
-
-    let dbfilename = args.iter().position(|x| x == "--dbfilename")
-        .and_then(|pos| args.get(pos + 1))
-        .map(|s| s.to_string());
-
-    let config: Arc<Mutex<ServerConfig>> = Arc::new(Mutex::new(ServerConfig {
-        dir: dir,
-        dbfilename: dbfilename
-         }));
+    let config: Arc<Mutex<ServerConfig>> = Arc::new(Mutex::new(ServerConfig::new_from_args()));
     let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
@@ -129,57 +56,5 @@ async fn main() -> tokio::io::Result<()> {
                 }
             }
         });
-    }
-}
-
-fn handle_command(
-    input: &[u8],
-    store: &Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>>,
-    config: &Arc<Mutex<ServerConfig>>,
-) -> Option<String> {
-    let input_str = String::from_utf8_lossy(input);
-    match input_str.parse::<RedisCommand>() {
-        Ok(RedisCommand::Ping) => Some("+PONG\r\n".to_string()),
-        Ok(RedisCommand::Echo(message)) => Some(format!("${}\r\n{}\r\n",
-            message.len(), message)),
-        Ok(RedisCommand::Set { key, value, expiry }) => {
-            let mut store = store.lock().unwrap();
-            let expiry_time = expiry.map(|dur| SystemTime::now() + dur);
-            store.insert(key, (value, expiry_time));
-            Some("+OK\r\n".to_string())
-        }
-        Ok(RedisCommand::Get(key)) => {
-            let mut store = store.lock().unwrap();
-            if let Some((value, expiry)) = store.get(&key) {
-                if let Some(expiry_time) = expiry {
-                    if SystemTime::now() > *expiry_time {
-                        store.remove(&key);
-                        return Some("$-1\r\n".to_string());
-                    }
-                }
-                Some(format!("${}\r\n{}\r\n", value.len(), value))
-            } else {
-                Some("$-1\r\n".to_string())
-            }
-        }
-
-        Ok(RedisCommand::ConfigGet(param)) => {
-            let config = config.lock().unwrap();
-            match param.as_str() {
-                "dir" => match &config.dir {
-                    Some(dir) => Some(format!("*2\r\n$3\r\ndir\r\n${}\r\n{}\r\n", dir.len(), dir)),
-                    None => Some("ERR dir not configured\r\n".to_string()),
-                }
-                "dbfilename" => match &config.dbfilename {
-                    Some(dbfilename) => Some(format!("*2\r\n$10\r\ndbfilename\r\n${}\r\n{}\r\n", dbfilename.len(), dbfilename)),
-                    None => Some("-ERR dbfilename not configured\r\n".to_string()),
-                },
-                _ => Some("-ERR unknown parameter\r\n".to_string()),
-
-            }
-        }
-        Ok(RedisCommand::Unknown) =>
-            Some("-ERR unknown command\r\n".to_string()),
-        Err(_) => None,
     }
 }
