@@ -74,7 +74,7 @@ impl FromStr for RedisCommand {
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    let dir = args.iter().position(|x| x == "dir")
+    let dir = args.iter().position(|x| x == "--dir")
         .and_then(|pos| args.get(pos + 1))
         .expect("Missing --dir argument")
         .to_string();
