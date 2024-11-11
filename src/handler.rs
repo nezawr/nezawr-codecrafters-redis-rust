@@ -11,30 +11,17 @@ pub fn handle_command(
 ) -> Option<String> {
     let input_str = String::from_utf8_lossy(input);
     match input_str.parse::<RedisCommand>() {
-        Ok(RedisCommand::Keys(pattern)) if pattern == "*" => {
-            let store = store.lock().unwrap();
-
-            if store.is_empty() {
-                // Respond with an empty array if there are no keys
-                Some("*0\r\n".to_string())
-            } else {
-                // Collect all keys as a RESP array format
-                let mut response = format!("*{}\r\n", store.len());
-                for key in store.keys() {
-                    if !key.is_empty() {
-                        response.push_str(&format!("${}\r\n{}\r\n", key.len(), key));
-                    }
-                }
-                Some(response)
-            }
-        }
         Ok(RedisCommand::Keys(_)) => {
             let store = store.lock().unwrap();
-            let keys: Vec<String> = store.keys().cloned().collect();
-            Some(format!("*{}\r\n{}", keys.len(), keys.iter()
-                .map(|key| format!("${}\r\n{}\r\n", key.len(), key))
-                .collect::<String>()))
-        }
+            let keys: Vec<&String> = store.keys().collect();
+            println!("Keys found in store: {:?}", keys); // Debugging output
+            
+            let mut response = format!("*{}\r\n", keys.len());
+            for key in keys {
+                response.push_str(&format!("${}\r\n{}\r\n", key.len(), key));
+            }
+            Some(response)
+        },
         Ok(RedisCommand::Ping) => Some("+PONG\r\n".to_string()),
         Ok(RedisCommand::Echo(message)) => Some(format!("${}\r\n{}\r\n",
             message.len(), message)),

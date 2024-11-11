@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use crate::config::ServerConfig;
 use crate::handler::handle_command;
-use crate::rdb::load_rdb_file;
+use crate::rdb::{load_rdb_file, print_rdb_file_contents};
 
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
@@ -18,9 +18,10 @@ async fn main() -> tokio::io::Result<()> {
     let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
-    // Load RDB file into the store if it exists
+    // Print the RDB file contents for debugging
     {
         let config = config.lock().unwrap();
+        //print_rdb_file_contents(&config.dir, &config.dbfilename).expect("Failed to print RDB file contents");
         load_rdb_file(&store, &config.dir, &config.dbfilename).expect("Failed to load RDB file");
     }
 
