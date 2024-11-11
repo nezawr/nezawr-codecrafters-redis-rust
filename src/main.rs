@@ -1,6 +1,7 @@
 mod config;
 mod command;
 mod handler;
+mod rdb;
 
 use tokio::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -9,12 +10,19 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use crate::config::ServerConfig;
 use crate::handler::handle_command;
+use crate::rdb::load_rdb_file;
 
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
     let config: Arc<Mutex<ServerConfig>> = Arc::new(Mutex::new(ServerConfig::new_from_args()));
     let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
         Arc::new(Mutex::new(HashMap::new()));
+
+    // Load RDB file into the store if it exists
+    {
+        let config = config.lock().unwrap();
+        load_rdb_file(&store, &config.dir, &config.dbfilename).expect("Failed to load RDB file");
+    }
 
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
     println!("Server listening on port 6379");

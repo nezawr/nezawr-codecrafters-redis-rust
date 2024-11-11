@@ -9,6 +9,7 @@ pub enum RedisCommand {
     Set { key: String, value: String, expiry: Option<Duration> },
     Get(String),
     ConfigGet(String),
+    Keys(String),
     Unknown,
 }
 
@@ -25,6 +26,9 @@ impl FromStr for RedisCommand {
             ["*2", "$4", "ECHO", len, message]
                 if len.starts_with('$') => {
                     Ok(RedisCommand::Echo(message.to_string()))
+            }
+            ["*2", "$4", "KEYS", "$1", pattern] if *pattern == "*" => {
+                Ok(RedisCommand::Keys(pattern.to_string())) // Handle KEYS "*"
             }
             // Updated SET with PX pattern
             ["*5", "$3", "SET", key_len, key, value_len, value, px_len, px, expiry_len, expiry]
