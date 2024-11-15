@@ -18,14 +18,19 @@ async fn main() -> tokio::io::Result<()> {
     let store: Arc<Mutex<HashMap<String, (String, Option<SystemTime>)>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
-    // Print the RDB file contents for debugging
+    let config_for_load  = Arc::clone(&config);
     {
-        let config = config.lock().unwrap();
-        load_rdb_file(&store, &config.dir, &config.dbfilename).expect("Failed to load RDB file");
+        let config_lock = config_for_load.lock().unwrap();
+        load_rdb_file(&store, &config_lock.dir, &config_lock.dbfilename)
+            .expect("Failed to load RDB file");
     }
 
-    let listener = TcpListener::bind("127.0.0.1:6379").await?;
-    println!("Server listening on port 6379");
+    let listener;
+    {
+        let config_lock = config.lock().unwrap();
+        listener = TcpListener::bind(format!("127.0.0.1:{}", config_lock.port)).await?;
+        println!("Server listening on port {}", config_lock.port);
+    }
 
 
     loop {

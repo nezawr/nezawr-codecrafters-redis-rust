@@ -4,6 +4,7 @@ use std::env;
 pub struct ServerConfig {
     pub dir: Option<String>,
     pub dbfilename: Option<String>,
+    pub port: String
 }
 
 impl ServerConfig {
@@ -17,6 +18,11 @@ impl ServerConfig {
         .and_then(|pos| args.get(pos + 1))
         .map(|s| s.to_string());
 
-        ServerConfig { dir, dbfilename }
+    let port = args.iter().position(|x| x == "--port")
+        .and_then(|pos| args.get(pos + 1))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "6379".to_string());
+
+        ServerConfig { dir, dbfilename, port }
     }
 }
