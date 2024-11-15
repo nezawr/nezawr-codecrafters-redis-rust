@@ -60,6 +60,10 @@ pub fn handle_command(
 
             }
         }
+
+        Ok(RedisCommand::Info) => {
+            Some("$11\r\nrole:master\r\n".to_string())
+        }
         Ok(RedisCommand::Unknown) =>
             Some("-ERR unknown command\r\n".to_string()),
         Err(_) => None,

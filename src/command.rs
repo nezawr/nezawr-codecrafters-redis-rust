@@ -10,6 +10,7 @@ pub enum RedisCommand {
     Get(String),
     ConfigGet(String),
     Keys(String),
+    Info,
     Unknown,
 }
 
@@ -56,6 +57,9 @@ impl FromStr for RedisCommand {
             ["*3", "$6", "CONFIG", "$3", "GET", param_len, param]
                 if param_len.starts_with('$') => {
                 Ok(RedisCommand::ConfigGet(param.to_string()))
+            }
+            ["*2", "$4", "INFO", "$11", "replication"] => {
+                Ok(RedisCommand::Info)
             }
             _ => {
                 Ok(RedisCommand::Unknown)
