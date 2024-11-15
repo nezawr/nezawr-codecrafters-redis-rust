@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use crate::config::ServerConfig;
 use crate::handler::handle_command;
-use crate::rdb::{load_rdb_file, print_rdb_file_contents};
+use crate::rdb::load_rdb_file;
 
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
@@ -21,7 +21,6 @@ async fn main() -> tokio::io::Result<()> {
     // Print the RDB file contents for debugging
     {
         let config = config.lock().unwrap();
-        //print_rdb_file_contents(&config.dir, &config.dbfilename).expect("Failed to print RDB file contents");
         load_rdb_file(&store, &config.dir, &config.dbfilename).expect("Failed to load RDB file");
     }
 

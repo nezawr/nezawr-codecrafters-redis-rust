@@ -15,7 +15,6 @@ pub fn handle_command(
             let store = store.lock().unwrap();
             let keys: Vec<&String> = store.keys().collect();
             println!("Keys found in store: {:?}", keys); // Debugging output
-            
             let mut response = format!("*{}\r\n", keys.len());
             for key in keys {
                 response.push_str(&format!("${}\r\n{}\r\n", key.len(), key));
