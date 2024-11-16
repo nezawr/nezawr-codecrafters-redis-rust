@@ -61,9 +61,15 @@ pub fn handle_command(
             }
         }
 
-        Ok(RedisCommand::Info) => {
-            Some("$11\r\nrole:master\r\n".to_string())
-        }
+            Ok(RedisCommand::Info) => {
+                let config = config.lock().unwrap();
+                if config.replica.is_some() {
+                    Some("$10\r\nrole:slave\r\n".to_string())
+                } else {
+                    Some("$11\r\nrole:master\r\n".to_string())
+                }
+            }
+    
         Ok(RedisCommand::Unknown) =>
             Some("-ERR unknown command\r\n".to_string()),
         Err(_) => None,

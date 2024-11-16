@@ -4,7 +4,8 @@ use std::env;
 pub struct ServerConfig {
     pub dir: Option<String>,
     pub dbfilename: Option<String>,
-    pub port: String
+    pub port: String,
+    pub replica: Option<String>
 }
 
 impl ServerConfig {
@@ -23,6 +24,10 @@ impl ServerConfig {
         .map(|s| s.to_string())
         .unwrap_or_else(|| "6379".to_string());
 
-        ServerConfig { dir, dbfilename, port }
+    let replica = args.iter().position(|x| x == "--replicaof")
+        .and_then(|pos| args.get(pos + 1))
+        .map(|s| s.to_string());
+
+        ServerConfig { dir, dbfilename, port, replica }
     }
 }
