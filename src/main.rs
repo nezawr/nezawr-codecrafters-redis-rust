@@ -25,6 +25,42 @@ async fn main() -> tokio::io::Result<()> {
             .expect("Failed to load RDB file");
     }
 
+    let config_for_replica = Arc::clone(&config);
+    {
+        let config_lock = config_for_replica.lock().unwrap();
+    
+        // If the server is configured as a replica, initiate a connection to the master
+        if let Some(replica_of) = config_lock.replica.clone() {
+            let parts: Vec<&str> = replica_of.split_whitespace().collect();
+            if parts.len() == 2 {
+                let master_host = parts[0].to_string(); // Clone as `String` for 'static lifetime
+                let master_port = parts[1].to_string(); // Clone as `String` for 'static lifetime
+    
+                tokio::spawn(async move {
+                    match tokio::net::TcpStream::connect(format!("{}:{}", master_host, master_port)).await {
+                        Ok(mut master_stream) => {
+                            println!("Connected to master at {}:{}", master_host, master_port);
+    
+                            // Send the PING command as part of the handshake
+                            let ping_command = "*1\r\n$4\r\nPING\r\n";
+                            if master_stream.write_all(ping_command.as_bytes()).await.is_err() {
+                                eprintln!("Failed to send PING command to master");
+                                return;
+                            }
+                            println!("Sent PING command to master");
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to connect to master: {:?}", e);
+                        }
+                    }
+                });
+            } else {
+                eprintln!("Invalid replica configuration: {}", replica_of);
+            }
+        }
+    }
+    
+
     let listener;
     {
         let config_lock = config.lock().unwrap();
