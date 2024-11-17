@@ -145,6 +145,21 @@ async fn perform_replica_handshake(master_host: String, master_port: String, rep
             }
             println!("Received OK for REPLCONF capa psync2");
 
+            // 4. Send PSYNC ? -1
+            let psync_command = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
+            master_stream.write_all(psync_command.as_bytes()).await?;
+            println!("Sent PSYNC command");
+
+            // Wait for +FULLRESYNC response
+            let n = master_stream.read(&mut buffer).await?;
+            let response = String::from_utf8_lossy(&buffer[..n]);
+            if response.starts_with("+FULLRESYNC") {
+                println!("Received FULLRESYNC response: {}", response);
+            } else {
+                eprintln!("Unexpected response to PSYNC: {}", response);
+                return Err(tokio::io::Error::new(tokio::io::ErrorKind::Other, "Unexpected PSYNC response"));
+            }
+
             Ok(())
         }
         Err(e) => {
