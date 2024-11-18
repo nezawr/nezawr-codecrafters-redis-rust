@@ -12,6 +12,7 @@ pub enum RedisCommand {
     Keys(String),
     Info,
     Replconf,
+    Psync { repl_id: String, offset: String},
     Unknown,
 }
 
@@ -65,6 +66,13 @@ impl FromStr for RedisCommand {
             ["*3", "$8", "REPLCONF", ..] => {
                     Ok(RedisCommand::Replconf)
             }
+            ["*3", "$5", "PSYNC", repl_id_len, repl_id, offset_len, offset]
+                if repl_id_len.starts_with('$') && offset_len.starts_with('$') => {
+                    Ok(RedisCommand::Psync {
+                        repl_id: repl_id.to_string(),
+                        offset: offset.to_string(),
+                    })
+                }
             _ => {
                 Ok(RedisCommand::Unknown)
             }

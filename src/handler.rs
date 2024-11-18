@@ -86,6 +86,15 @@ pub fn handle_command(
             Some("+OK\r\n".to_string())
         }
 
+        Ok(RedisCommand::Psync { repl_id, offset }) => {
+            let master_repl_id = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+            let master_offset = 0;
+            Some(format!(
+                "+FULLRESYNC {} {}\r\n",
+                master_repl_id, master_offset
+            ))
+        }
+
         Ok(RedisCommand::Unknown) =>
             Some("-ERR unknown command\r\n".to_string()),
         Err(_) => None,
