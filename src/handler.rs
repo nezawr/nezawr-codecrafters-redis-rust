@@ -63,7 +63,7 @@ pub fn handle_command(
 
         Ok(RedisCommand::Info) => {
             let config = config.lock().unwrap();
-        
+
             if config.replica.is_some() {
                 // Slave role
                 Some("$10\r\nrole:slave\r\n".to_string())
@@ -71,17 +71,20 @@ pub fn handle_command(
                 // Master role
                 let master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"; // 40-char string
                 let master_repl_offset = 0; // Offset is 0
-        
+
                 // Correct length calculation for the bulk string
                 let content = format!(
                     "\r\nrole:master\r\nmaster_replid:{}\r\nmaster_repl_offset:{}\r\n",
                     master_replid, master_repl_offset
                 );
-        
+
                 Some(format!("$89{}", content))
             }
         }
-        
+
+        Ok(RedisCommand::Replconf) => {
+            Some("+OK\r\n".to_string())
+        }
 
         Ok(RedisCommand::Unknown) =>
             Some("-ERR unknown command\r\n".to_string()),

@@ -11,6 +11,7 @@ pub enum RedisCommand {
     ConfigGet(String),
     Keys(String),
     Info,
+    Replconf,
     Unknown,
 }
 
@@ -60,6 +61,9 @@ impl FromStr for RedisCommand {
             }
             ["*2", "$4", "INFO", "$11", "replication"] => {
                 Ok(RedisCommand::Info)
+            }
+            ["*3", "$8", "REPLCONF", ..] => {
+                    Ok(RedisCommand::Replconf)
             }
             _ => {
                 Ok(RedisCommand::Unknown)
